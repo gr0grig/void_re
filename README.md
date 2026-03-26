@@ -71,6 +71,7 @@ decompile.py writes `// @old_version` to .c headers. Downstream tools auto-detec
 | [docs/func_table.md](docs/func_table.md) | Module group table structure |
 | [docs/vm.md](docs/vm.md) | VM architecture, stack, threads |
 | [docs/pipeline.md](docs/pipeline.md) | Toolchain usage, C pseudocode syntax |
+| [docs/script_api.md](docs/script_api.md) | ~400 script API functions (GetDotStr, CallNat, CallMethod) |
 
 ## C Pseudocode Example
 
