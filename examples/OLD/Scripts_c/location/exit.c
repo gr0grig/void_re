@@ -1,0 +1,56 @@
+// gscript: exit.bin
+// @old_version
+// @version: 0
+// @globals: 0
+// @func_table: 1 groups offsets=4
+// @ft_group 0: parent=-1 stack=0 locals=0 vtable=[] imports=[(0,0)]
+//   export "getAutomonolog" args=0 cb=-1 {func_2}
+// #export {func_2} name="getAutomonolog"
+
+// .init:-1 (locals=0)
+getAutomonolog()
+{
+    CallNat(r0, 20, 0x0);
+}
+
+// exit.sc:4 (locals=0)
+func_1()
+{
+    // exit.sc:4
+    return r0;  // @src exit.sc:4
+}
+
+// exit.sc:16 (locals=4)
+func_2()
+{
+    // exit.sc:8
+    r3 = GetDotStr("World");  // @pool 0x0  // @src exit.sc:8
+    SetDotRaw(r2, 6);
+    Free1(r3);
+    SetDotRaw(r1, 11);
+    Free1(r2);
+    r2 = "automonolog_exit_location";
+    GetDot(r0, 1);
+    Free2(r1, r2);
+    if (r0) goto L_00b4;
+    // exit.sc:10
+    r0 = true;  // @src exit.sc:10
+    r2 = GetDotStr("World");  // @pool 0x0
+    SetDotRaw(r1, 6);
+    Free1(r2);
+    r2 = "automonolog_exit_location";
+    GetDotRaw(r1, 1);
+    Free1(r2);
+    // exit.sc:12
+    r0 = null_str;  // @src exit.sc:12
+    r_neg4 = r0;
+    Free1(r0);
+    return r0;
+    // exit.sc:15
+  L_00b4:
+    r0 = null_str;  // @src exit.sc:15
+    r_neg4 = r0;
+    Free1(r0);
+    return r0;
+}
+

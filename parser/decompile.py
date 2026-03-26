@@ -294,13 +294,17 @@ def decompile_instr(ins):
         m = re.match(r'r(-?\d+),\s+"((?:[^"\\]|\\.)*)"', args)
         if m:
             reg, name = int(m.group(1)), m.group(2)
-            return f'{fmt_reg(reg)} = GetDotStr("{name}");'
+            pool_m = re.search(r'pool_off=0x([0-9a-f]+)', comment)
+            pool_ann = f'  // @pool 0x{pool_m.group(1)}' if pool_m else ''
+            return f'{fmt_reg(reg)} = GetDotStr("{name}");{pool_ann}'
 
     if op == 'SetDotStr':
         m = re.match(r'r(-?\d+),\s+"((?:[^"\\]|\\.)*)"', args)
         if m:
             reg, name = int(m.group(1)), m.group(2)
-            return f'SetDotStr({fmt_reg(reg)}, "{name}");'
+            pool_m = re.search(r'pool_off=0x([0-9a-f]+)', comment)
+            pool_ann = f'  // @pool 0x{pool_m.group(1)}' if pool_m else ''
+            return f'SetDotStr({fmt_reg(reg)}, "{name}");{pool_ann}'
 
     if op in ('GetDot', 'SetDot', 'GetDotRaw', 'SetDotRaw'):
         m = re.match(r'r(-?\d+),\s+(\d+)', args)
@@ -426,6 +430,7 @@ def parse_header_data(header_lines):
         'globals_data': b'',
         'func_table': b'',
         'filename': '',
+        'old_version': False,
     }
 
     func_table_hex = []
@@ -433,6 +438,10 @@ def parse_header_data(header_lines):
 
     for line in header_lines:
         stripped = line.lstrip('; ').strip()
+
+        if stripped == 'old_version':
+            data['old_version'] = True
+            continue
 
         m = re.match(r'gscript disassembly: (.+)', stripped)
         if m:
@@ -593,12 +602,17 @@ def emit_func_table_annotation(ft_bytes, bc_offset_to_funcidx):
     return lines
 
 
-def emit_metadata(header_lines, functions):
+def emit_metadata(header_lines, functions, old_version=False):
     """Generate clean C metadata from .asm header — no raw hex dumps."""
     data = parse_header_data(header_lines)
     result = []
 
+    # old_version: from .asm header or CLI flag
+    is_old = old_version or data.get('old_version', False)
+
     result.append(f'// gscript: {data["filename"]}')
+    if is_old:
+        result.append('// @old_version')
     result.append(f'// @version: {data["version"]}')
 
     # Globals annotation
@@ -676,12 +690,12 @@ def decompile_function(func, func_names=None):
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-def decompile_file(input_path, output_path=None):
+def decompile_file(input_path, output_path=None, old_version=False):
     """Decompile a single .asm file to C."""
     header_lines, functions, func_names = parse_asm(input_path)
 
     out = []
-    out.extend(emit_metadata(header_lines, functions))
+    out.extend(emit_metadata(header_lines, functions, old_version=old_version))
     out.append('')
 
     for func in functions:
@@ -702,6 +716,7 @@ def main():
     parser.add_argument('input', nargs='?', help='Input .asm file or directory')
     parser.add_argument('-o', '--output', help='Output .c file or directory')
     parser.add_argument('--batch', action='store_true', help='Process directory')
+    parser.add_argument('--old', action='store_true', help='Old version format marker')
     args = parser.parse_args()
 
     if not args.input:
@@ -717,7 +732,7 @@ def main():
             rel = os.path.relpath(f, input_dir)
             out = os.path.join(output_dir, os.path.splitext(rel)[0] + '.c')
             try:
-                decompile_file(f, out)
+                decompile_file(f, out, old_version=args.old)
                 ok += 1
             except Exception as e:
                 print(f"ERROR: {rel}: {e}")
@@ -725,7 +740,7 @@ def main():
         print(f"Done: {ok} OK, {fail} FAIL")
     else:
         out = args.output or os.path.splitext(args.input)[0] + '.c'
-        decompile_file(args.input, out)
+        decompile_file(args.input, out, old_version=args.old)
         print(f"Decompiled: {out}")
 
 

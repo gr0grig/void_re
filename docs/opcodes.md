@@ -166,6 +166,37 @@
 | 0x2C| (null)  | -    | Invalid opcode |
 | 0x2D| (null)  | -    | Invalid opcode |
 
+## Old Version Opcode Remapping
+
+The old version of GameModule.dll (IDA instance `dq9s`, dispatch `sub_10146EE0`)
+uses different numbering for opcodes **0x36-0x46**. All other opcodes are identical.
+
+In the old version, `GetDot`..`New` occupied 0x36-0x43 and `Jmp`/`BrZ`/`BrNZ` were
+at 0x44-0x46. The new version moved the branches to the start of the range:
+
+| Old | New | Name |
+|-----|-----|------|
+| 0x36 | 0x39 | GetDot |
+| 0x37 | 0x3A | SetDot |
+| 0x38 | 0x3B | GetDotRaw |
+| 0x39 | 0x3C | SetDotRaw |
+| 0x3A | 0x3D | GetInd |
+| 0x3B | 0x3E | SetInd |
+| 0x3C | 0x3F | Call |
+| 0x3D | 0x40 | CallExt |
+| 0x3E | 0x41 | Ret |
+| 0x3F | 0x42 | CallNat |
+| 0x40 | 0x43 | CallNat2 |
+| 0x41 | 0x44 | RetV |
+| 0x42 | 0x45 | Spawn |
+| 0x43 | 0x46 | New |
+| 0x44 | 0x36 | Jmp |
+| 0x45 | 0x37 | BrZ |
+| 0x46 | 0x38 | BrNZ |
+
+The toolchain uses **new version** numbering internally. The `--old` flag on
+`disasm.py` and `asm.py` applies the remap at binary I/O boundaries.
+
 ## Notes
 - Binary operations (0x24-0x2B, 0x2E-0x35): use reg[N] as first operand and reg[N+1] as second
 - sub_101DD510 = Release/Decref function for refcounted values (string, object)

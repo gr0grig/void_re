@@ -107,6 +107,16 @@ OPCODES = {
 
 FUNC_HEADER_MARKER = 0xFFFFFFFF
 
+# Old→New opcode remap (only 0x36-0x46 differ between old and new GameModule.dll)
+# Old version had Jmp/BrZ/BrNZ at 0x44-0x46; new version moved them to 0x36-0x38
+OLD_TO_NEW = {
+    0x36: 0x39, 0x37: 0x3A, 0x38: 0x3B, 0x39: 0x3C,
+    0x3A: 0x3D, 0x3B: 0x3E, 0x3C: 0x3F, 0x3D: 0x40,
+    0x3E: 0x41, 0x3F: 0x42, 0x40: 0x43, 0x41: 0x44,
+    0x42: 0x45, 0x43: 0x46,
+    0x44: 0x36, 0x45: 0x37, 0x46: 0x38,
+}
+
 
 # ── Low-level readers ─────────────────────────────────────────────────
 
@@ -362,7 +372,7 @@ def decode_free_regs(opcode, reg, operands):
     return regs
 
 
-def disassemble(script, verbose=False, func_names=None):
+def disassemble(script, verbose=False, func_names=None, old_version=False):
     """Disassemble a VoidScript's bytecode into text lines."""
     bc = script.bytecode
     lines = []
@@ -401,6 +411,8 @@ def disassemble(script, verbose=False, func_names=None):
             continue
 
         opcode = dw & 0xFF
+        if old_version:
+            opcode = OLD_TO_NEW.get(opcode, opcode)
         reg = sign_extend_24(dw >> 8)
 
         if opcode not in OPCODES:
@@ -464,11 +476,13 @@ def disassemble(script, verbose=False, func_names=None):
             pool_off = raw_ops[0]
             s = script.pool_ascii(pool_off)
             text = f"  0x{off:04x}: GetDotStr r{reg}, \"{escape_str(s)}\""
+            comment = f"  ; pool_off=0x{pool_off:x}"
 
         elif opcode == 0x48:  # SetDotStr
             pool_off = raw_ops[0]
             s = script.pool_ascii(pool_off)
             text = f"  0x{off:04x}: SetDotStr r{reg}, \"{escape_str(s)}\""
+            comment = f"  ; pool_off=0x{pool_off:x}"
 
         elif opcode in (0x36, 0x37, 0x38):  # Jmp, BrZ, BrNZ
             target = raw_ops[0]
@@ -580,13 +594,15 @@ def disassemble(script, verbose=False, func_names=None):
 
 # ── Header generation ─────────────────────────────────────────────────
 
-def generate_header(script, filename, func_names=None):
+def generate_header(script, filename, func_names=None, old_version=False):
     """Generate metadata header comments."""
     if func_names is None:
         func_names = {}
     lines = []
     lines.append(f"; gscript disassembly: {filename}")
     lines.append(f"; version={script.version}, pool_size={script.pool_size}")
+    if old_version:
+        lines.append("; old_version")
     lines.append(f"; globals={script.s1_size}, func_table={script.s2_size}")
     lines.append(f"; bytecode={script.bc_size} bytes")
     lines.append(f"; inline_strings={script.inline_str_count}, patches={script.patch_count}")
@@ -631,15 +647,15 @@ def generate_header(script, filename, func_names=None):
 
 # ── Main ──────────────────────────────────────────────────────────────
 
-def disasm_file(input_path, output_path=None, verbose=False):
+def disasm_file(input_path, output_path=None, verbose=False, old_version=False):
     """Disassemble a single .bin file."""
     data = open(input_path, 'rb').read()
     script = VoidScript(data)
     basename = os.path.basename(input_path)
 
     func_names = script.parse_func_names()
-    header = generate_header(script, basename, func_names)
-    body = disassemble(script, verbose, func_names)
+    header = generate_header(script, basename, func_names, old_version=old_version)
+    body = disassemble(script, verbose, func_names, old_version=old_version)
 
     result = '\n'.join(header + body) + '\n'
 
@@ -657,6 +673,7 @@ def main():
     parser.add_argument('-o', '--output', help='Output .asm file or directory')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--batch', action='store_true', help='Process all .bin in directory')
+    parser.add_argument('--old', action='store_true', help='Old version opcode format')
     args = parser.parse_args()
 
     if not args.input:
@@ -679,14 +696,14 @@ def main():
             rel = os.path.relpath(f, input_dir)
             out = os.path.join(output_dir, os.path.splitext(rel)[0] + '.asm')
             try:
-                disasm_file(f, out, args.verbose)
+                disasm_file(f, out, args.verbose, old_version=args.old)
                 ok += 1
             except Exception as e:
                 print(f"ERROR: {rel}: {e}")
                 fail += 1
         print(f"Done: {ok} OK, {fail} FAIL")
     else:
-        disasm_file(args.input, args.output, args.verbose)
+        disasm_file(args.input, args.output, args.verbose, old_version=args.old)
 
 
 if __name__ == '__main__':

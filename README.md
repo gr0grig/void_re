@@ -5,7 +5,8 @@ gscript bytecode from **The Void** (GameModule.dll).
 
 ## Status
 
-- **483/483** scripts: byte-identical round-trip (.bin -> .asm -> .c -> .asm -> .bin)
+- **483/483** new version scripts: byte-identical round-trip (.bin -> .asm -> .c -> .asm -> .bin)
+- **423/423** old version scripts: byte-identical round-trip with `--old` flag
 - 80 opcodes fully documented
 - func_table binary format fully reverse-engineered
 - VM internals mapped from GameModule.dll via IDA Pro
@@ -36,6 +37,21 @@ python parser/decompile.py Scripts_asm/ --batch -o Scripts_c/
 python parser/compile.py Scripts_c/ --batch -o Scripts_compiled/
 python parser/asm.py Scripts_compiled/ --batch -o Scripts_assembled/ --original Scripts/
 ```
+
+### Old version support
+
+The old version of GameModule.dll uses a different opcode numbering (opcodes 0x36-0x46 are
+rearranged). Pass `--old` to all tools when working with old version scripts:
+
+```bash
+python parser/disasm.py OldScripts/ --batch --old -o OldScripts_asm/
+python parser/decompile.py OldScripts_asm/ --batch --old -o OldScripts_c/
+python parser/compile.py OldScripts_c/ --batch --old -o OldScripts_compiled/
+python parser/asm.py OldScripts_compiled/ --batch --old -o OldScripts_assembled/ --original OldScripts/
+```
+
+The `--old` flag is auto-propagated: disasm.py writes `; old_version` to .asm headers,
+decompile.py writes `// @old_version` to .c headers. Downstream tools auto-detect these markers.
 
 ## Tools
 
@@ -97,7 +113,9 @@ The Void uses a custom scripting VM (`gscript` namespace in GameModule.dll):
 
 ## GameModule.dll (IDA)
 
-Key functions reverse-engineered from GameModule.dll (IDA instance `qut7`):
+Key functions reverse-engineered from GameModule.dll:
+
+**New version** (IDA instance `qut7`):
 
 | Address | Role |
 |---------|------|
@@ -106,3 +124,9 @@ Key functions reverse-engineered from GameModule.dll (IDA instance `qut7`):
 | `sub_10147360` | Thread constructor |
 | `sub_10147080` | PushCallFrame |
 | `sub_101E3450` | File loader |
+
+**Old version** (IDA instance `dq9s`):
+
+| Address | Role |
+|---------|------|
+| `sub_10146EE0` | VM dispatch (80-case switch, jump table `0x1014b248`) |

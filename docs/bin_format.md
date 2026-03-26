@@ -74,7 +74,16 @@ Patches map bytecode offsets to source file locations:
 
 These are purely informational and do not affect execution.
 
-## Key GameModule.dll Functions (IDA instance qut7)
+## Old vs New Version
+
+The `.bin` binary format is identical between old and new versions of GameModule.dll.
+The only difference is opcode byte values in the bytecode section: opcodes 0x36-0x46
+are renumbered (see `opcodes.md`). The string pool, func_table, globals, and debug
+info sections are all the same format.
+
+## Key GameModule.dll Functions
+
+### New version (IDA instance `qut7`)
 
 | Address | Function | Role |
 |---------|----------|------|
@@ -83,3 +92,9 @@ These are purely informational and do not affect execution.
 | `sub_102002A0` | Patch parser | Reads debug info section |
 | `sub_10200910` | Context init | Creates globals array |
 | `sub_10147C10` | VM dispatch | 80-case switch, main interpreter |
+
+### Old version (IDA instance `dq9s`)
+
+| Address | Function | Role |
+|---------|----------|------|
+| `sub_10146EE0` | VM dispatch | 80-case switch (jump table `0x1014b248`) |

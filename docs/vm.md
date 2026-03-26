@@ -2,8 +2,9 @@
 
 ## Architecture
 
-Register-based VM with typed stack slots. Main dispatch loop at `sub_10147C10`
-(17KB, 80-case switch via jump table at `0x1014bf78`).
+Register-based VM with typed stack slots. Both old and new versions of GameModule.dll
+use the same VM architecture with 80 opcodes. The only difference is opcode numbering
+in the 0x36-0x46 range (see `opcodes.md`).
 
 ## Stack
 
@@ -100,12 +101,23 @@ Spawn(nlocals, module_index, bc_target, nargs)
 `Free1`..`Free5` release refcounted values (strings, objects).
 The VM calls `sub_101DD510` (decref) for type tags 3 and 4.
 
-## Key Functions (IDA instance qut7)
+## Key Functions
+
+### New version (IDA instance `qut7`)
 
 | Address | Function | Role |
 |---------|----------|------|
-| `sub_10147C10` | VM dispatch | Main interpreter loop (80 opcodes) |
+| `sub_10147C10` | VM dispatch | Main interpreter loop (80 opcodes, jump table `0x1014bf78`) |
 | `sub_10147360` | Thread constructor | Creates thread, reads group, allocates stack |
 | `sub_10147080` | PushCallFrame | Saves return address and stack for Call |
 | `sub_10146BA0` | IsTruthy | Bool check for BrZ/BrNZ |
 | `sub_101DD510` | Decref | Release refcounted values |
+
+### Old version (IDA instance `dq9s`)
+
+| Address | Function | Role |
+|---------|----------|------|
+| `sub_10146EE0` | VM dispatch | Main interpreter loop (80 opcodes, jump table `0x1014b248`) |
+
+The old version has the same 80 opcodes but opcodes 0x36-0x46 are renumbered.
+See `opcodes.md` for the full remap table.

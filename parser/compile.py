@@ -86,6 +86,13 @@ REG_PAT = r'(r(?:_neg)?\d+)'
 STRING_PAT = r'"((?:[^"\\]|\\.)*)"'
 
 
+def _extract_pool_ann():
+    """Extract @pool annotation from compile_stmt._full_stmt if present."""
+    full = getattr(compile_stmt, '_full_stmt', '')
+    m = re.search(r'@pool\s+0x([0-9a-f]+)', full)
+    return f'  ; pool_off=0x{m.group(1)}' if m else ''
+
+
 def compile_stmt(stmt):
     """Compile one C statement to (opcode, args_str, register_int).
     Returns None for labels/comments.
@@ -233,14 +240,16 @@ def compile_stmt(stmt):
     if m:
         reg = parse_reg(m.group(1))
         name = m.group(2)
-        return ('GetDotStr', f'r{reg}, "{name}"', reg)
+        pool_ann = _extract_pool_ann()
+        return ('GetDotStr', f'r{reg}, "{name}"{pool_ann}', reg)
 
     # --- SetDotStr: SetDotStr(rN, "name") ---
     m = re.match(rf'^SetDotStr\({REG_PAT},\s*{STRING_PAT}\)$', s)
     if m:
         reg = parse_reg(m.group(1))
         name = m.group(2)
-        return ('SetDotStr', f'r{reg}, "{name}"', reg)
+        pool_ann = _extract_pool_ann()
+        return ('SetDotStr', f'r{reg}, "{name}"{pool_ann}', reg)
 
     # --- GetDot/SetDot/GetDotRaw/SetDotRaw: Op(rN, N) ---
     m = re.match(rf'^(GetDot|SetDot|GetDotRaw|SetDotRaw)\({REG_PAT},\s*(\d+)\)$', s)
@@ -791,6 +800,7 @@ def parse_c_file(path):
         'globals_data': b'',
         'func_table': b'',
         'ft_offset_patches': [],  # [(byte_pos, func_idx)]
+        'old_version': False,
     }
 
     ft_annotation_lines = []  # collect func_table annotation content
@@ -802,6 +812,11 @@ def parse_c_file(path):
 
         # --- Parse new-format annotations ---
         if not in_body:
+            # @old_version annotation
+            if re.match(r'^//\s*@old_version\s*$', stripped):
+                metadata['old_version'] = True
+                continue
+
             # @version annotation
             vm = re.match(r'^//\s*@version:\s*(\d+)', stripped)
             if vm:
@@ -1051,9 +1066,12 @@ def compile_function_pass2(func, compiled, labels, func_start, func_names=None):
 
 # ── File compilation ─────────────────────────────────────────────────
 
-def compile_file(input_path, output_path=None):
+def compile_file(input_path, output_path=None, old_version=False):
     """Compile a single .c file to .asm."""
     header_lines, functions, func_names, metadata = parse_c_file(input_path)
+    # CLI flag or annotation
+    if old_version:
+        metadata['old_version'] = True
 
     # Two-pass: first compute all addresses and labels
     offset = 0
@@ -1084,6 +1102,8 @@ def compile_file(input_path, output_path=None):
     out = []
     basename = os.path.basename(input_path).replace('.c', '.bin')
     out.append(f'; gscript disassembly: {basename}')
+    if metadata.get('old_version'):
+        out.append('; old_version')
     out.append(f'; version={metadata["version"]}')
     out.append(f'; globals={metadata["globals"]}, func_table={len(func_table)}')
     out.append(f'; bytecode={total_bc_size} bytes')
@@ -1191,6 +1211,7 @@ def main():
     parser.add_argument('input', nargs='?', help='Input .c file or directory')
     parser.add_argument('-o', '--output', help='Output .asm file or directory')
     parser.add_argument('--batch', action='store_true', help='Process directory')
+    parser.add_argument('--old', action='store_true', help='Old version format marker')
     args = parser.parse_args()
 
     if not args.input:
@@ -1206,7 +1227,7 @@ def main():
             rel = os.path.relpath(f, input_dir)
             out_path = os.path.join(output_dir, os.path.splitext(rel)[0] + '.asm')
             try:
-                compile_file(f, out_path)
+                compile_file(f, out_path, old_version=args.old)
                 ok += 1
             except Exception as e:
                 print(f"ERROR: {rel}: {e}")
@@ -1214,7 +1235,7 @@ def main():
         print(f"Done: {ok} OK, {fail} FAIL")
     else:
         out_path = args.output or os.path.splitext(args.input)[0] + '.asm'
-        compile_file(args.input, out_path)
+        compile_file(args.input, out_path, old_version=args.old)
         print(f"Compiled: {out_path}")
 
 

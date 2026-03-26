@@ -19,7 +19,9 @@ Four Python scripts for full round-trip processing of `.bin` script files:
          └──────────────── byte-identical ────────────────────┘
 ```
 
-Full round-trip is **483/483 byte-identical** for all Void scripts.
+Full round-trip is **byte-identical** for all scripts:
+- **483/483** new version scripts
+- **423/423** old version scripts (with `--old` flag)
 
 ## Usage
 
@@ -42,6 +44,23 @@ python decompile.py Scripts_asm/ --batch -o Scripts_c/
 python compile.py Scripts_c/ --batch -o Scripts_compiled/
 python asm.py Scripts_compiled/ --batch -o Scripts_assembled/ --original Scripts/
 ```
+
+### Old version scripts
+
+The old GameModule.dll uses different opcode numbering (0x36-0x46 rearranged).
+Pass `--old` to all tools:
+
+```bash
+python disasm.py OldScripts/ --batch --old -o OldScripts_asm/
+python decompile.py OldScripts_asm/ --batch --old -o OldScripts_c/
+python compile.py OldScripts_c/ --batch --old -o OldScripts_compiled/
+python asm.py OldScripts_compiled/ --batch --old -o OldScripts_assembled/ --original OldScripts/
+```
+
+The flag auto-propagates via markers in intermediate files:
+- `disasm.py` writes `; old_version` to `.asm` headers
+- `decompile.py` writes `// @old_version` to `.c` headers
+- `asm.py` and `compile.py` auto-detect these markers
 
 ## C Pseudocode Format
 
@@ -78,6 +97,8 @@ init()
 | `@ft_group I: parent=P stack=S locals=L ...` | Group descriptor |
 | `export "name" args=N cb=C {func_F}` | Named export (continuation of ft_group) |
 | `#export {func_N} name="name"` | Export summary (informational) |
+| `@old_version` | Old version opcode format marker |
+| `@pool 0xNN` | Exact pool offset for GetDotStr/SetDotStr (inline, after `//`) |
 | `@src file.sc:line` | Source location (inline, after `//`) |
 
 ### Statement Syntax

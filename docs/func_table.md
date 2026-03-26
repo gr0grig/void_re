@@ -38,7 +38,7 @@ or the previous group's tail data).
 
 Type tags: `0`=bool, `1`=int, `2`=float, `3`=string
 
-**Invariants** (verified across all 483 scripts):
+**Invariants** (verified across all 483 new + 423 old scripts):
 - Root groups (parent=-1): `stack == locals`
 - Child groups: `stack == parent.stack + locals`
 - Types: only values 0-3 (object=4 is never used)
@@ -143,7 +143,11 @@ In decompiled `.c` files, func_table is represented as structured annotations:
 // #export {func_2} name="death"
 ```
 
-## Key VM Functions (GameModule.dll, IDA qut7)
+## Key VM Functions
+
+The func_table format is identical between old and new GameModule.dll versions.
+
+### New version (IDA instance `qut7`)
 
 | Address | Function | Role |
 |---------|----------|------|
@@ -152,3 +156,9 @@ In decompiled `.c` files, func_table is represented as structured annotations:
 | `sub_10147C10` @ 0x1014b871 | VM dispatch / CallExt | Reads vtable[func_idx] for dispatch |
 | `sub_10200910` | Context init | Creates globals array and dispatch table |
 | `sub_101E3450` | File loader | Loads .sc/.bin, calls parser |
+
+### Old version (IDA instance `dq9s`)
+
+| Address | Function | Role |
+|---------|----------|------|
+| `sub_10146EE0` | VM dispatch | CallExt dispatch uses same vtable format |

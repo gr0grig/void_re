@@ -45,6 +45,15 @@ OPCODE_BY_NAME = {
     "Free4":        (0x4D, 12), "Free5":        (0x4E, 12),
 }
 
+# New→Old opcode remap (only 0x36-0x46 differ between old and new GameModule.dll)
+NEW_TO_OLD = {
+    0x39: 0x36, 0x3A: 0x37, 0x3B: 0x38, 0x3C: 0x39,
+    0x3D: 0x3A, 0x3E: 0x3B, 0x3F: 0x3C, 0x40: 0x3D,
+    0x41: 0x3E, 0x42: 0x3F, 0x43: 0x40, 0x44: 0x41,
+    0x45: 0x42, 0x46: 0x43,
+    0x36: 0x44, 0x37: 0x45, 0x38: 0x46,
+}
+
 
 def unescape_str(s):
     """Unescape special characters from .asm strings."""
@@ -105,6 +114,7 @@ def parse_asm_file(path):
     inline_strings = []
     patches = []
     func_table_hex = []
+    old_version = False
 
     globals_data = b''
     in_func_table = False
@@ -113,6 +123,10 @@ def parse_asm_file(path):
 
     for line in lines:
         line = line.rstrip('\n')
+
+        if line.strip() == '; old_version':
+            old_version = True
+            continue
 
         # Header metadata
         m = re.match(r'^; version=(\d+)(?:, pool_size=(\d+))?', line)
@@ -197,6 +211,7 @@ def parse_asm_file(path):
         'inline_strings': inline_strings,
         'patches': patches,
         'lines': lines,
+        'old_version': old_version,
     }
 
 
@@ -266,14 +281,19 @@ def assemble_bytecode(lines, original_pool):
             bc.extend(pack_u32(pool_off))
 
         elif opname in ("GetDotStr", "SetDotStr"):
-            # GetDotStr r<N>, "<string>"
+            # GetDotStr r<N>, "<string>"  ; pool_off=0xNN
             m2 = re.match(r'r(-?\d+),\s+"((?:[^"\\]|\\.)*)"', args_str)
             if not m2:
                 raise ValueError(f"Bad {opname} args: {args_str}")
             reg = int(m2.group(1))
-            # Find the string in the pool
-            string_val = m2.group(2)
-            pool_off = find_ascii_in_pool(original_pool, string_val)
+            # Use preserved pool_off from comment if available
+            comment = line[line.index(';'):] if ';' in line else ''
+            m3 = re.search(r'pool_off=0x([0-9a-f]+)', comment)
+            if m3:
+                pool_off = int(m3.group(1), 16)
+            else:
+                string_val = m2.group(2)
+                pool_off = find_ascii_in_pool(original_pool, string_val)
             bc.extend(pack_u32(opcode | (encode_reg(reg) << 8)))
             bc.extend(pack_u32(pool_off))
 
@@ -577,13 +597,16 @@ def build_patches_from_src(lines):
     return inline_strings, patches
 
 
-def assemble_file(asm_path, bin_path, original_bin_path=None):
+def assemble_file(asm_path, bin_path, original_bin_path=None, old_version=False):
     """Assemble an .asm file into a .bin file.
 
     If original_bin_path is provided, use it to extract the exact pool bytes.
     Otherwise, build pool from instruction string references.
     """
     meta = parse_asm_file(asm_path)
+    # Auto-detect old_version from .asm header, or override via flag
+    if meta['old_version']:
+        old_version = True
 
     # Get pool
     if original_bin_path and os.path.exists(original_bin_path):
@@ -644,7 +667,7 @@ def assemble_file(asm_path, bin_path, original_bin_path=None):
 
         # Re-parse with original line for comment extraction
         # The assemble_single_instruction handles this
-        instr_bytes = assemble_single_instruction(instr_part, line.rstrip('\n'), pool)
+        instr_bytes = assemble_single_instruction(instr_part, line.rstrip('\n'), pool, old_version=old_version)
         bc.extend(instr_bytes)
 
     bytecode = bytes(bc)
@@ -713,7 +736,7 @@ def assemble_file(asm_path, bin_path, original_bin_path=None):
     return len(bytecode)
 
 
-def assemble_single_instruction(instr_part, full_line, pool):
+def assemble_single_instruction(instr_part, full_line, pool, old_version=False):
     """Assemble a single instruction line into bytes."""
     # Strip trailing comment for main parsing (but keep full_line for LoadString)
     if '  ;' in instr_part:
@@ -735,6 +758,8 @@ def assemble_single_instruction(instr_part, full_line, pool):
         raise ValueError(f"Unknown opcode: {opname}")
 
     opcode, size = OPCODE_BY_NAME[opname]
+    if old_version:
+        opcode = NEW_TO_OLD.get(opcode, opcode)
     result = bytearray()
 
     if opname == "LoadString":
@@ -765,7 +790,13 @@ def assemble_single_instruction(instr_part, full_line, pool):
             raise ValueError(f"Bad {opname}: {args_str}")
         reg = int(m2.group(1))
         string_val = unescape_str(m2.group(2))
-        pool_off = find_ascii_in_pool(pool, string_val)
+        # Use preserved pool_off from comment if available
+        comment = full_line[full_line.index(';'):] if ';' in full_line else ''
+        m3 = re.search(r'pool_off=0x([0-9a-f]+)', comment)
+        if m3:
+            pool_off = int(m3.group(1), 16)
+        else:
+            pool_off = find_ascii_in_pool(pool, string_val)
         result.extend(pack_u32(opcode | (encode_reg(reg) << 8)))
         result.extend(pack_u32(pool_off))
 
@@ -898,6 +929,7 @@ def main():
     parser.add_argument('-o', '--output', help='Output .bin file or directory')
     parser.add_argument('--original', help='Original .bin directory (for pool data)')
     parser.add_argument('--batch', action='store_true', help='Process all .asm in directory')
+    parser.add_argument('--old', action='store_true', help='Output old version opcode format')
     args = parser.parse_args()
 
     if not args.input:
@@ -919,7 +951,7 @@ def main():
             if orig_dir:
                 orig = os.path.join(orig_dir, os.path.splitext(rel)[0] + '.bin')
             try:
-                assemble_file(f, out, orig)
+                assemble_file(f, out, orig, old_version=args.old)
                 ok += 1
             except Exception as e:
                 print(f"ERROR: {rel}: {e}")
@@ -928,7 +960,7 @@ def main():
     else:
         out = args.output or os.path.splitext(args.input)[0] + '.bin'
         orig = args.original
-        assemble_file(args.input, out, orig)
+        assemble_file(args.input, out, orig, old_version=args.old)
         print(f"Assembled: {out}")
 
 
